@@ -11,8 +11,10 @@ Usage:
                              [-o OUTPUT_DIR] [--seed SEED]
 """
 
-import numpy as np
 import os
+os.environ["QT_QPA_PLATFORM"] = "xcb"
+
+import numpy as np
 import argparse
 import matplotlib.pyplot as plt
 
@@ -47,9 +49,11 @@ def generate_data(a: float = 0.1,
 def save_data(x: np.ndarray,
               eta: np.ndarray,
               phi: np.ndarray,
+              L: float,
+              h0: float,
               output_dir: str = 'data') -> str:
     """
-    Save x, eta, phi arrays to CSV in the specified directory.
+    Save x, eta, phi arrays and parameters L, h0 to CSV in the specified directory.
 
     Returns
     -------
@@ -57,9 +61,12 @@ def save_data(x: np.ndarray,
         Path to the saved CSV file.
     """
     os.makedirs(output_dir, exist_ok=True)
-    data = np.column_stack((x, eta, phi))
+    # repeat L and h0 for each sample
+    L_arr = np.full_like(x, L)
+    h0_arr = np.full_like(x, h0)
+    data = np.column_stack((x, eta, phi, L_arr, h0_arr))
     output_path = os.path.join(output_dir, 'data.csv')
-    header = 'x,eta,phi'
+    header = 'x,eta,phi,L,h0'
     np.savetxt(output_path, data, delimiter=',', header=header, comments='')
     return output_path
 
@@ -116,7 +123,7 @@ def parse_args() -> argparse.Namespace:
     Parse command-line arguments.
     """
     parser = argparse.ArgumentParser(
-        description="Generate and visualise wave data over [0, L]."
+        description="Generate, save, and visualise wave data over [0, L]."
     )
     parser.add_argument('-a', '--amplitude', type=float, default=0.1,
                         help='Amplitude a for η(x) = a*sin(x)')
@@ -138,6 +145,7 @@ if __name__ == '__main__':
                                L=args.length,
                                N=args.num_samples,
                                seed=args.seed)
-    path = save_data(x, eta, phi, output_dir=args.output_dir)
+    path = save_data(x, eta, phi, L=args.length, h0=args.h0,
+                     output_dir=args.output_dir)
     print(f'Data successfully saved to: {path}')
     plot_wave(x, eta, phi, h0=args.h0, L=args.length)
