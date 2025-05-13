@@ -154,10 +154,41 @@ def main():
     components = grad_sol.split()
     u_comp = components[0]
     v_comp = components[1]
+    u_comp.set_allow_extrapolation(True)
+    v_comp.set_allow_extrapolation(True)
 
     # Plot horizontal and vertical velocities
     plot_scalar(u_comp, mesh, title='u = ∂Φ/∂x (horizontal velocity)')
     plot_scalar(v_comp, mesh, title='v = ∂Φ/∂y (vertical velocity)')
+
+        # New: extract velocities on free surface and plot & save
+    # Evaluate u and v at free-surface points
+    x_pts = x   # original x data from CSV
+    y_pts = eta # corresponding η(x)
+    u_vals = np.array([u_comp([pt, eta_spline(pt), 0.0]) for pt in x_pts])
+    v_vals = np.array([v_comp([pt, eta_spline(pt), 0.0]) for pt in x_pts])
+
+    # Plot u and v along free surface
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(8, 6), sharex=True)
+    ax1.plot(x_pts, u_vals, 'b-')
+    ax1.set_ylabel('u (x, η(x))')
+    ax1.set_title('Horizontal velocity on free surface')
+    ax2.plot(x_pts, v_vals, 'r-')
+    ax2.set_xlabel('x')
+    ax2.set_ylabel('v (x, η(x))')
+    ax2.set_title('Vertical velocity on free surface')
+    plt.tight_layout()
+    plt.show()
+
+    # Save free surface velocities to CSV
+    sol_dir = os.path.dirname(args.output) or 'solution'
+    u_csv = os.path.join(sol_dir, 'u_free_surface.csv')
+    v_csv = os.path.join(sol_dir, 'v_free_surface.csv')
+    np.savetxt(u_csv, np.column_stack((x_pts, u_vals)),
+               delimiter=',', header='x,u', comments='')
+    np.savetxt(v_csv, np.column_stack((x_pts, v_vals)),
+               delimiter=',', header='x,v', comments='')
+    print(f'Free-surface velocities saved to {u_csv} and {v_csv}')
 
 if __name__ == '__main__':
     main()
