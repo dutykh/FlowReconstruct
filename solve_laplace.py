@@ -43,9 +43,13 @@ class PeriodicBoundary(SubDomain):
         if near(x[0], self.L, self.tol):
             y[0] = x[0] - self.L
             y[1] = x[1]
+            if len(x) > 2:  # Handle 3D case even though we're in 2D
+                y[2] = x[2]
         else:
             y[0] = x[0]
             y[1] = x[1]
+            if len(x) > 2:  # Handle 3D case even though we're in 2D
+                y[2] = x[2]
 
 class FreeSurface(SubDomain):
     def __init__(self, eta_spline, tol=1e-3):
@@ -71,7 +75,12 @@ def plot_solution(sol, mesh, title='Φ(x,y)'):  # pragma: no cover
 
     # Create a Triangulation
     from matplotlib.tri import Triangulation
-    tri = Triangulation(coords[:, 0], coords[:, 1], mesh.cells()["triangle"])
+    # Get the cell connectivity for triangulation
+    cells_array = []
+    for cell in cells(mesh):
+        cells_array.append([cell.entities(0)[0], cell.entities(0)[1], cell.entities(0)[2]])
+    cells_array = np.array(cells_array)
+    tri = Triangulation(coords[:, 0], coords[:, 1], cells_array)
     plt.figure(figsize=(6,5))
     tpc = plt.tricontourf(tri, values, 50)
     plt.colorbar(tpc, label='Φ')
