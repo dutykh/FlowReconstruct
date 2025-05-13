@@ -10,7 +10,7 @@ generates a triangular mesh of the fluid domain (for FEniCS), and
 exports to Gmsh (.msh) and XDMF files, plus plots the domain and mesh.
 
 Usage:
-    python mesh_domain.py -i data/data.csv -m mesh.msh -x mesh.xdmf --mesh-size 0.1
+    python mesh_domain.py -i data/data.csv -m mesh/mesh.msh -x mesh/mesh.xdmf --mesh-size 0.1
 """
 
 import os
@@ -124,16 +124,20 @@ def parse_args():
     )
     parser.add_argument('-i', '--input', default='data/data.csv',
                         help='Path to input CSV file')
-    parser.add_argument('-m', '--msh', default='mesh.msh',
-                        help='Output Gmsh .msh file')
-    parser.add_argument('-x', '--xdmf', default='mesh.xdmf',
-                        help='Output XDMF file for FEniCS')
+    parser.add_argument('-m', '--msh', default='mesh/mesh.msh',
+                        help='Output Gmsh .msh file (default: mesh/mesh.msh)')
+    parser.add_argument('-x', '--xdmf', default='mesh/mesh.xdmf',
+                        help='Output XDMF file for FEniCS (default: mesh/mesh.xdmf)')
     parser.add_argument('--mesh-size', type=float, default=0.1,
                         help='Target mesh element size (default: 0.1)')
     return parser.parse_args()
 
 def main():
     args = parse_args()
+    # Ensure mesh directory exists
+    mesh_dir = os.path.dirname(args.msh) or 'mesh'
+    if not os.path.exists(mesh_dir):
+        os.makedirs(mesh_dir, exist_ok=True)
     x_raw, eta_raw, L, h0 = read_data(args.input)
     x_full, eta_full = extrapolate_eta(x_raw, eta_raw, L)
     generate_mesh(x_full, eta_full, L, h0, args.mesh_size)

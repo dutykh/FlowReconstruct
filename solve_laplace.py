@@ -2,6 +2,9 @@
 """
 solve_laplace.py
 
+Author: Dr. Denys Dutykh (Khalifa University of Science and Technology, Abu Dhabi, UAE)
+Date: 2025-05-13
+
 Solves the Laplace equation ∇²Φ = 0 in a 2D wave tank domain with:
   • Periodic BC in x (at x=0 and x=L)
   • Homogeneous Neumann BC at bottom (∂Φ/∂y = 0 at y = -h0)
@@ -13,8 +16,11 @@ Requires:
   • data/data.csv : CSV containing x,η,φ,L,h0
 
 Usage:
-    python solve_laplace.py --mesh mesh.xdmf --data data/data.csv --degree 2 --output solution.xdmf
+    python solve_laplace.py --mesh mesh/mesh.xdmf --data data/data.csv --degree 2 --output solution/solution.xdmf
 """
+
+import os
+os.environ["QT_QPA_PLATFORM"] = "xcb"
 
 import numpy as np
 from scipy.interpolate import CubicSpline
@@ -68,22 +74,20 @@ class PhiExpression(UserExpression):
     def value_shape(self):
         return ()
 
-def plot_solution(sol, mesh, title='Φ(x,y)'):  # pragma: no cover
-    # Extract vertex coordinates and solution values
-    coords = mesh.coordinates()
-    values = sol.compute_vertex_values(mesh)
-
-    # Create a Triangulation
+def plot_scalar(field, mesh, title='Field'):  # pragma: no cover
+    """Plot a scalar field defined on mesh vertices."""
     from matplotlib.tri import Triangulation
-    # Get the cell connectivity for triangulation
+    coords = mesh.coordinates()
+    values = field.compute_vertex_values(mesh)
+    # Extract triangle connectivity
     cells_array = []
     for cell in cells(mesh):
-        cells_array.append([cell.entities(0)[0], cell.entities(0)[1], cell.entities(0)[2]])
-    cells_array = np.array(cells_array)
-    tri = Triangulation(coords[:, 0], coords[:, 1], cells_array)
+        vert = cell.entities(0)
+        cells_array.append([vert[0], vert[1], vert[2]])
+    tri = Triangulation(coords[:,0], coords[:,1], np.array(cells_array))
     plt.figure(figsize=(6,5))
     tpc = plt.tricontourf(tri, values, 50)
-    plt.colorbar(tpc, label='Φ')
+    plt.colorbar(tpc, label=title)
     plt.xlabel('x')
     plt.ylabel('y')
     plt.title(title)
@@ -99,42 +103,61 @@ def main():
                         help='CSV file with x,eta,phi,L,h0')
     parser.add_argument('--degree',  type=int, default=2,
                         help='Polynomial degree of finite elements')
-    parser.add_argument('--output',  default='solution.xdmf',
+    parser.add_argument('--output',  default='solution/solution.xdmf',
                         help='Filename for soln (XDMF)')
     args = parser.parse_args()
 
+    # Read and interpolate boundary data
     x, eta, phi, L, h0 = read_data(args.data)
     eta_spline = CubicSpline(x, eta, extrapolate=True)
     phi_spline = CubicSpline(x, phi, extrapolate=True)
 
+    # Load mesh
     mesh = Mesh()
     with XDMFFile(args.mesh) as infile:
         infile.read(mesh)
 
+    # Mark free surface for Dirichlet BC
     boundaries = MeshFunction('size_t', mesh, mesh.topology().dim()-1, 0)
     free = FreeSurface(eta_spline)
     free.mark(boundaries, 1)
 
+    # Function space with periodic BC in x
     V = FunctionSpace(mesh, 'Lagrange', args.degree,
                       constrained_domain=PeriodicBoundary(L))
 
+    # Apply Dirichlet BC on free surface
     phi_expr = PhiExpression(phi_spline, degree=args.degree)
     bc = DirichletBC(V, phi_expr, boundaries, 1)
 
+    # Solve Laplace equation
     u = TrialFunction(V)
     v = TestFunction(V)
     a = inner(grad(u), grad(v)) * dx
     Lf = Constant(0.0) * v * dx
-
     sol = Function(V)
     solve(a == Lf, sol, bc)
 
+    # Ensure output directory exists
+    sol_dir = os.path.dirname(args.output) or 'solution'
+    os.makedirs(sol_dir, exist_ok=True)
     with XDMFFile(args.output) as outfile:
         outfile.write(sol)
     print(f'Solution written to {args.output}')
 
-    # Plot solution
-    plot_solution(sol, mesh)
+    # Plot potential
+    plot_scalar(sol, mesh, title='Φ(x,y)')
+
+    # Compute velocity components
+    W = VectorFunctionSpace(mesh, 'Lagrange', args.degree)
+    grad_sol = project(grad(sol), W)
+    components = grad_sol.split()
+    u_comp = components[0]
+    v_comp = components[1]
+
+    # Plot horizontal and vertical velocities
+    plot_scalar(u_comp, mesh, title='u = ∂Φ/∂x (horizontal velocity)')
+    plot_scalar(v_comp, mesh, title='v = ∂Φ/∂y (vertical velocity)')
 
 if __name__ == '__main__':
     main()
