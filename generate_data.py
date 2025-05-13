@@ -16,7 +16,6 @@ import os
 import argparse
 import matplotlib.pyplot as plt
 
-
 def generate_data(a: float = 0.1,
                   L: float = 4 * np.pi,
                   N: int = 100,
@@ -45,7 +44,6 @@ def generate_data(a: float = 0.1,
 
     return x, eta, phi
 
-
 def save_data(x: np.ndarray,
               eta: np.ndarray,
               phi: np.ndarray,
@@ -64,7 +62,6 @@ def save_data(x: np.ndarray,
     header = 'x,eta,phi'
     np.savetxt(output_path, data, delimiter=',', header=header, comments='')
     return output_path
-
 
 def plot_wave(x: np.ndarray,
               eta: np.ndarray,
@@ -109,11 +106,10 @@ def plot_wave(x: np.ndarray,
     axes[1].set_xlabel('x')
     axes[1].set_ylabel('φ(x)')
     axes[1].set_title('Velocity potential at free surface')
-    axes[1].legend(loc='lower right', bbox_to_anchor=(1python generate_data.py -N 200 --h0 1.0
+    axes[1].legend(loc='lower right', bbox_to_anchor=(1, 0.01), fontsize='small')
 
     plt.tight_layout()
     plt.show()
-
 
 def parse_args() -> argparse.Namespace:
     """
