@@ -146,6 +146,110 @@ def parse_args():
                         help='Target mesh element size (default: 0.1)')
     return parser.parse_args()
 
+def print_mesh_statistics(msh_file: str):
+    """Print detailed statistics about the mesh: node, edge, triangle counts, edge lengths, triangle areas, quality."""
+    import meshio
+    import numpy as np
+    import itertools
+
+    mesh = meshio.read(msh_file)
+    points = mesh.points[:, :2]
+    triangles = None
+    for cell in mesh.cells:
+        if cell.type == 'triangle':
+            triangles = cell.data
+            break
+    if triangles is None:
+        print("No triangles found in mesh.")
+        return
+
+    n_nodes = points.shape[0]
+    n_triangles = triangles.shape[0]
+    # Build edge set
+    edges = set()
+    for tri in triangles:
+        for i, j in [(0,1), (1,2), (2,0)]:
+            edge = tuple(sorted((tri[i], tri[j])))
+            edges.add(edge)
+    edge_list = np.array(list(edges))
+    n_edges = edge_list.shape[0]
+
+    # Edge lengths
+    edge_lengths = np.linalg.norm(points[edge_list[:,0]] - points[edge_list[:,1]], axis=1)
+    min_edge = edge_lengths.min()
+    max_edge = edge_lengths.max()
+    mean_edge = edge_lengths.mean()
+    std_edge = edge_lengths.std()
+
+    # Triangle areas
+    def triangle_area(p0, p1, p2):
+        return 0.5 * abs((p1[0]-p0[0])*(p2[1]-p0[1]) - (p2[0]-p0[0])*(p1[1]-p0[1]))
+    areas = np.array([
+        triangle_area(points[tri[0]], points[tri[1]], points[tri[2]])
+        for tri in triangles
+    ])
+    min_area = areas.min()
+    max_area = areas.max()
+    mean_area = areas.mean()
+    std_area = areas.std()
+
+    # Mesh quality: aspect ratio and min angle
+    def triangle_aspect_ratio(p0, p1, p2):
+        a = np.linalg.norm(p1-p0)
+        b = np.linalg.norm(p2-p1)
+        c = np.linalg.norm(p0-p2)
+        s = 0.5*(a+b+c)
+        area = triangle_area(p0, p1, p2)
+        if area == 0:
+            return np.inf
+        R = (a*b*c)/(4*area)
+        r = area/s if s > 0 else 0
+        return R/r if r > 0 else np.inf
+    def triangle_angles(p0, p1, p2):
+        a = np.linalg.norm(p2-p1)
+        b = np.linalg.norm(p2-p0)
+        c = np.linalg.norm(p1-p0)
+        angles = []
+        # Law of cosines
+        for x, y, z in [(a,b,c),(b,c,a),(c,a,b)]:
+            cos_theta = (y**2 + z**2 - x**2)/(2*y*z) if y > 0 and z > 0 else -1
+            angle = np.arccos(np.clip(cos_theta, -1, 1)) * 180/np.pi
+            angles.append(angle)
+        return angles
+    aspect_ratios = np.array([
+        triangle_aspect_ratio(points[tri[0]], points[tri[1]], points[tri[2]])
+        for tri in triangles
+    ])
+    min_angles = np.array([
+        min(triangle_angles(points[tri[0]], points[tri[1]], points[tri[2]]))
+        for tri in triangles
+    ])
+    max_angles = np.array([
+        max(triangle_angles(points[tri[0]], points[tri[1]], points[tri[2]]))
+        for tri in triangles
+    ])
+
+    print("\n===== Mesh Statistics Report =====")
+    print(f"Number of nodes:       {n_nodes}")
+    print(f"Number of edges:       {n_edges}")
+    print(f"Number of triangles:   {n_triangles}")
+    print("\nEdge length statistics:")
+    print(f"  Min:    {min_edge:.6g}")
+    print(f"  Max:    {max_edge:.6g}")
+    print(f"  Mean:   {mean_edge:.6g}")
+    print(f"  Stddev: {std_edge:.6g}")
+    print("\nTriangle area statistics:")
+    print(f"  Min:    {min_area:.6g}")
+    print(f"  Max:    {max_area:.6g}")
+    print(f"  Mean:   {mean_area:.6g}")
+    print(f"  Stddev: {std_area:.6g}")
+    print("\nMesh quality metrics:")
+    print(f"  Aspect ratio (R/r): min {aspect_ratios.min():.4g}, max {aspect_ratios.max():.4g}, mean {aspect_ratios.mean():.4g}, std {aspect_ratios.std():.4g}")
+    print(f"  Min angle: min {min_angles.min():.4g}°, max {min_angles.max():.4g}°, mean {min_angles.mean():.4g}°, std {min_angles.std():.4g}°")
+    print(f"  Max angle: min {max_angles.min():.4g}°, max {max_angles.max():.4g}°, mean {max_angles.mean():.4g}°, std {max_angles.std():.4g}°")
+    print("=================================\n")
+
+
 def main():
     args = parse_args()
     # Ensure mesh directory exists
@@ -158,6 +262,7 @@ def main():
     save_mesh(args.msh, args.xdmf)
     print(f"Mesh written to '{args.msh}' and '{args.xdmf}'")
     plot_domain_and_mesh(args.msh, x_full, eta_full, h0)
+    print_mesh_statistics(args.msh)
 
 if __name__ == '__main__':
     main()
