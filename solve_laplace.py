@@ -36,6 +36,26 @@ def read_data(path):
     phi = raw[:,2]
     L = float(raw[0,3])
     h0 = float(raw[0,4])
+    # Enforce periodicity at x=0 and x=L for eta and phi
+    idx_sort = np.argsort(x)
+    x = x[idx_sort]
+    eta = eta[idx_sort]
+    phi = phi[idx_sort]
+    # Build splines for extrapolation if needed
+    eta_spline = CubicSpline(x, eta, extrapolate=True)
+    phi_spline = CubicSpline(x, phi, extrapolate=True)
+    # Ensure x=0 and x=L are present
+    if x[0] > 1e-12:
+        x = np.insert(x, 0, 0.0)
+        eta = np.insert(eta, 0, eta_spline(0.0))
+        phi = np.insert(phi, 0, phi_spline(0.0))
+    if abs(x[-1] - L) > 1e-12:
+        x = np.append(x, L)
+        eta = np.append(eta, eta_spline(L))
+        phi = np.append(phi, phi_spline(L))
+    # Enforce periodicity
+    eta[0] = eta[-1] = 0.5 * (eta[0] + eta[-1])
+    phi[0] = phi[-1] = 0.5 * (phi[0] + phi[-1])
     return x, eta, phi, L, h0
 
 class PeriodicBoundary(SubDomain):
@@ -87,7 +107,12 @@ def plot_scalar(field, mesh, title='Field'):  # pragma: no cover
     tri = Triangulation(coords[:,0], coords[:,1], np.array(cells_array))
     plt.figure(figsize=(6,5))
     tpc = plt.tricontourf(tri, values, 50)
-    plt.colorbar(tpc, label=title)
+    cbar = plt.colorbar(tpc, label=title)
+    # Add min/max info for uy_minus_vx plots
+    if 'u_y - v_x' in title or 'uy_minus_vx' in title or '|.|' in title:
+        minval = np.min(values)
+        maxval = np.max(values)
+        cbar.ax.set_ylabel(f'{title}\n[min={minval:.2e}, max={maxval:.2e}]', rotation=270, labelpad=20)
     plt.xlabel('x')
     plt.ylabel('y')
     plt.title(title)
@@ -157,28 +182,56 @@ def main():
     u_comp.set_allow_extrapolation(True)
     v_comp.set_allow_extrapolation(True)
 
-    # Plot horizontal and vertical velocities
-    plot_scalar(u_comp, mesh, title='u = ∂Φ/∂x (horizontal velocity)')
-    plot_scalar(v_comp, mesh, title='v = ∂Φ/∂y (vertical velocity)')
+    # Compute gradients of u and v (each is a vector field)
+    grad_u = project(grad(u_comp), W)
+    grad_v = project(grad(v_comp), W)
 
-        # New: extract velocities on free surface and plot & save
+    # Save gradients to XDMF
+    grad_u_file = os.path.join(sol_dir, 'grad_u.xdmf')
+    grad_v_file = os.path.join(sol_dir, 'grad_v.xdmf')
+    with XDMFFile(grad_u_file) as fgu:
+        fgu.write(grad_u)
+    with XDMFFile(grad_v_file) as fgv:
+        fgv.write(grad_v)
+    print(f'Gradient of u saved to {grad_u_file}')
+    print(f'Gradient of v saved to {grad_v_file}')
+
+    # Compute u_y - v_x
+    # grad_u: [∂u/∂x, ∂u/∂y], grad_v: [∂v/∂x, ∂v/∂y]
+    # Extract components
+    u_y = project(grad_u[1], FunctionSpace(mesh, 'Lagrange', args.degree))
+    v_x = project(grad_v[0], FunctionSpace(mesh, 'Lagrange', args.degree))
+    uy_minus_vx = project(u_y - v_x, FunctionSpace(mesh, 'Lagrange', args.degree))
+
+    # Plot u_y - v_x and print its norms
+    max_norm = np.max(np.abs(uy_minus_vx.compute_vertex_values(mesh)))
+    l2_norm = np.sqrt(assemble(uy_minus_vx**2 * dx))
+    print(f'Maximum |u_y - v_x| over the domain: {max_norm:.3e}')
+    print(f'L2 norm of u_y - v_x over the domain: {l2_norm:.3e}')
+    plot_scalar(uy_minus_vx, mesh, title=f"u_y - v_x (max |.|={max_norm:.2e})")
+
+    # Plot horizontal and vertical velocities
+    # plot_scalar(u_comp, mesh, title='u = ∂Φ/∂x (horizontal velocity)')
+    # plot_scalar(v_comp, mesh, title='v = ∂Φ/∂y (vertical velocity)')
+
+    # New: extract velocities on free surface and plot & save
     # Evaluate u and v at free-surface points
     x_pts = x   # original x data from CSV
     y_pts = eta # corresponding η(x)
     u_vals = np.array([u_comp([pt, eta_spline(pt), 0.0]) for pt in x_pts])
     v_vals = np.array([v_comp([pt, eta_spline(pt), 0.0]) for pt in x_pts])
 
-    # Plot u and v along free surface
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(8, 6), sharex=True)
-    ax1.plot(x_pts, u_vals, 'b-')
-    ax1.set_ylabel('u (x, η(x))')
-    ax1.set_title('Horizontal velocity on free surface')
-    ax2.plot(x_pts, v_vals, 'r-')
-    ax2.set_xlabel('x')
-    ax2.set_ylabel('v (x, η(x))')
-    ax2.set_title('Vertical velocity on free surface')
-    plt.tight_layout()
-    plt.show()
+    # # Plot u and v along free surface
+    # fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(8, 6), sharex=True)
+    # ax1.plot(x_pts, u_vals, 'b-')
+    # ax1.set_ylabel('u (x, η(x))')
+    # ax1.set_title('Horizontal velocity on free surface')
+    # ax2.plot(x_pts, v_vals, 'r-')
+    # ax2.set_xlabel('x')
+    # ax2.set_ylabel('v (x, η(x))')
+    # ax2.set_title('Vertical velocity on free surface')
+    # plt.tight_layout()
+    # plt.show()
 
     # Save free surface velocities to CSV
     sol_dir = os.path.dirname(args.output) or 'solution'

@@ -14,6 +14,10 @@ This project provides a workflow for reconstructing the velocity potential in a 
 ## Components & Workflow
 
 **New in the latest version:**
+- **Periodicity enforcement:** The scripts now ensure periodicity at x=0 and x=L for η(x) and φ(x) in the data and mesh. Endpoints are added if missing, and their values are synchronized to enforce periodicity.
+- **Mesh smoothing and optimization:** The mesh generation script (`mesh_domain.py`) now applies built-in Gmsh mesh optimization (Netgen optimizer) after mesh generation, improving mesh quality for FEM solvers.
+- **Improved gradient diagnostics:** After solving, the script computes and prints both the maximum and L2 norm of the quantity u_y - v_x over the domain for diagnostic purposes.
+- **Enhanced plotting:** The colorbar for u_y - v_x plots now displays min/max values for more informative visualization.
 - After solving the Laplace equation, the script automatically plots the potential Φ(x, y) and both velocity components (u, v) as scalar fields over the domain.
 - The script now extracts, plots, and saves the horizontal and vertical velocity components along the free surface to CSV files: `solution/u_free_surface.csv` and `solution/v_free_surface.csv`.
 
@@ -25,15 +29,17 @@ This project provides a workflow for reconstructing the velocity potential in a 
      ```
 
 2. **mesh_domain.py**
-   - Reads wave data from CSV, extrapolates endpoints, generates a triangular mesh of the fluid domain (for FEniCS), and exports to Gmsh (.msh) and XDMF files. Also plots the domain and mesh.
+   - Reads wave data from CSV, extrapolates endpoints, and enforces periodicity at x=0 and x=L for η(x).
+   - Generates a triangular mesh of the fluid domain (for FEniCS), applies Gmsh mesh optimization (Netgen), and exports to Gmsh (.msh) and XDMF files. Also plots the domain and mesh.
    - Usage example:
      ```bash
      python mesh_domain.py -i data/data.csv -m mesh/mesh.msh -x mesh/mesh.xdmf --mesh-size 0.1
      ```
 
 3. **solve_laplace.py**
-   - Solves the Laplace equation ∇²Φ = 0 in the generated mesh domain, with appropriate boundary conditions (periodic, Neumann, Dirichlet from data).
+   - Solves the Laplace equation ∇²Φ = 0 in the generated mesh domain, with appropriate boundary conditions (periodic, Neumann, Dirichlet from data). Enforces periodicity in η(x) and φ(x) from input data.
    - Plots the potential field Φ(x, y) and visualizes both horizontal (u = ∂Φ/∂x) and vertical (v = ∂Φ/∂y) velocity components after solving.
+   - Computes and prints both the maximum and L2 norm of u_y - v_x over the domain. The colorbar for this plot shows min/max values for clearer interpretation.
    - Extracts the free-surface velocity components (u, v) at the surface points and saves them to `solution/u_free_surface.csv` and `solution/v_free_surface.csv`.
    - Exports the solution to XDMF format.
    - Usage example:

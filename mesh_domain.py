@@ -33,19 +33,24 @@ def read_data(path: str):
     return x, eta, L, h0
 
 def extrapolate_eta(x: np.ndarray, eta: np.ndarray, L: float):
-    """Use a CubicSpline interpolant to extrapolate η at x=0 and x=L."""
+    """Use a CubicSpline interpolant to extrapolate η at x=0 and x=L, enforcing periodicity."""
     idx = np.argsort(x)
     xs = x[idx]
     ys = eta[idx]
     spline = CubicSpline(xs, ys, extrapolate=True)
-    eta0 = float(spline(0.0))
-    etaL = float(spline(L))
-    x_full = np.concatenate(([0.0], xs, [L]))
-    eta_full = np.concatenate(([eta0], ys, [etaL]))
-    return x_full, eta_full
+    # Ensure x=0 and x=L are present
+    if xs[0] > 1e-12:
+        xs = np.insert(xs, 0, 0.0)
+        ys = np.insert(ys, 0, spline(0.0))
+    if abs(xs[-1] - L) > 1e-12:
+        xs = np.append(xs, L)
+        ys = np.append(ys, spline(L))
+    # Enforce periodicity: eta[0] = eta[-1] = avg
+    ys[0] = ys[-1] = 0.5 * (ys[0] + ys[-1])
+    return xs, ys
 
 def generate_mesh(x: np.ndarray, eta: np.ndarray, L: float, h0: float, mesh_size: float):
-    """Use Gmsh to create a 2D mesh of the fluid domain."""
+    """Use Gmsh to create a 2D mesh of the fluid domain, with smoothing and optimization for FEM."""
     gmsh.initialize()
     gmsh.model.add("wave_domain")
     # Free surface points and lines
@@ -60,7 +65,16 @@ def generate_mesh(x: np.ndarray, eta: np.ndarray, L: float, h0: float, mesh_size
     loop = gmsh.model.geo.addCurveLoop(lines)
     gmsh.model.geo.addPlaneSurface([loop])
     gmsh.model.geo.synchronize()
+    # Mesh generation
     gmsh.model.mesh.generate(2)
+    # Mesh optimization (smoothing via optimize)
+    # Laplacian smoothing is not available in the gmsh Python API directly
+    # Use built-in mesh optimization instead
+    gmsh.option.setNumber('Mesh.Optimize', 1)
+    gmsh.model.mesh.optimize('Netgen')  # Netgen optimizer is good for FEM
+    # Optionally, you can use 'Mesh.OptimizeNetgen' for further improvement
+    gmsh.option.setNumber('Mesh.OptimizeNetgen', 1)
+    gmsh.model.mesh.optimize('Netgen')
 
 def save_mesh(msh_file: str, xdmf_file: str):
     """Write Gmsh .msh and convert to XDMF for FEniCS."""
