@@ -58,3 +58,7 @@ This project provides a workflow for reconstructing the velocity potential in a 
 See each script's docstring for details and options.
 
 ---
+
+## Acknowledgement
+
+Special thanks to Professor Francesco Fedele (Georgia Tech, Atlanta, USA) for posing the pertinent questions which led to this development.
