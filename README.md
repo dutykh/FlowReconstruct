@@ -7,6 +7,10 @@
 ## Overview
 This project provides a workflow for reconstructing the velocity potential in a 2D wave tank given random sea state data, using mesh generation and finite element methods (FEniCS/Gmsh).
 
+<p align="center">
+  <img src="img/Illustration.png" alt="FlowReconstruct illustration" width="600"/>
+</p>
+
 ## Components & Workflow
 
 **New in the latest version:**
