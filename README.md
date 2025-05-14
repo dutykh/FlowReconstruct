@@ -1,6 +1,7 @@
 # FlowReconstruct: Potential Flow Reconstruction from Dirichlet data with periodic boundary conditions
 
 **Author:** Dr. Denys Dutykh (Khalifa University of Science and Technology, Abu Dhabi, UAE)
+
 **Date:** 2025-05-13
 
 ## Overview
