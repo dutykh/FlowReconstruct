@@ -24,8 +24,12 @@ os.environ["QT_QPA_PLATFORM"] = "xcb"
 
 import numpy as np
 from scipy.interpolate import CubicSpline
-from fenics import *
-import meshio
+from matplotlib.tri import Triangulation
+from fenics import (
+    UserExpression, Function, FunctionSpace, VectorFunctionSpace,
+    TrialFunction, TestFunction, DirichletBC, Constant, dx, grad, project,
+    assemble, solve, XDMFFile, Mesh, MeshFunction, near, inner, SubDomain, cells
+)
 import argparse
 import matplotlib.pyplot as plt
 
@@ -96,7 +100,6 @@ class PhiExpression(UserExpression):
 
 def plot_scalar(field, mesh, title='Field'):  # pragma: no cover
     """Plot a scalar field defined on mesh vertices."""
-    from matplotlib.tri import Triangulation
     coords = mesh.coordinates()
     values = field.compute_vertex_values(mesh)
     # Extract triangle connectivity
@@ -104,7 +107,8 @@ def plot_scalar(field, mesh, title='Field'):  # pragma: no cover
     for cell in cells(mesh):
         vert = cell.entities(0)
         cells_array.append([vert[0], vert[1], vert[2]])
-    tri = Triangulation(coords[:,0], coords[:,1], np.array(cells_array))
+    cells_array = np.array(cells_array, dtype=np.int32)
+    tri = Triangulation(coords[:,0], coords[:,1], cells_array)
     plt.figure(figsize=(6,5))
     tpc = plt.tricontourf(tri, values, 50)
     cbar = plt.colorbar(tpc, label=title)
@@ -217,7 +221,6 @@ def main():
     # New: extract velocities on free surface and plot & save
     # Evaluate u and v at free-surface points
     x_pts = x   # original x data from CSV
-    y_pts = eta # corresponding η(x)
     u_vals = np.array([u_comp([pt, eta_spline(pt), 0.0]) for pt in x_pts])
     v_vals = np.array([v_comp([pt, eta_spline(pt), 0.0]) for pt in x_pts])
 

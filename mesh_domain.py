@@ -150,7 +150,6 @@ def print_mesh_statistics(msh_file: str):
     """Print detailed statistics about the mesh: node, edge, triangle counts, edge lengths, triangle areas, quality."""
     import meshio
     import numpy as np
-    import itertools
 
     mesh = meshio.read(msh_file)
     points = mesh.points[:, :2]
