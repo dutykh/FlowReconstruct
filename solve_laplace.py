@@ -25,11 +25,9 @@ os.environ["QT_QPA_PLATFORM"] = "xcb"
 import numpy as np
 from scipy.interpolate import CubicSpline
 from matplotlib.tri import Triangulation
-from fenics import (
-    UserExpression, Function, FunctionSpace, VectorFunctionSpace,
+from fenics import (UserExpression, Function, FunctionSpace, VectorFunctionSpace,
     TrialFunction, TestFunction, DirichletBC, Constant, dx, grad, project,
-    assemble, solve, XDMFFile, Mesh, MeshFunction, near, inner, SubDomain, cells
-)
+    assemble, solve, XDMFFile, Mesh, MeshFunction, near, inner, SubDomain, cells)
 import argparse
 import matplotlib.pyplot as plt
 
