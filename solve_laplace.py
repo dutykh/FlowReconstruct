@@ -20,24 +20,45 @@ Usage:
 """
 
 import os
+
 os.environ["QT_QPA_PLATFORM"] = "xcb"
 
 import numpy as np
 from scipy.interpolate import CubicSpline
 from matplotlib.tri import Triangulation
-from fenics import (UserExpression, Function, FunctionSpace, VectorFunctionSpace,
-    TrialFunction, TestFunction, DirichletBC, Constant, dx, grad, project,
-    assemble, solve, XDMFFile, Mesh, MeshFunction, near, inner, SubDomain, cells)
+from fenics import (
+    UserExpression,
+    Function,
+    FunctionSpace,
+    VectorFunctionSpace,
+    TrialFunction,
+    TestFunction,
+    DirichletBC,
+    Constant,
+    dx,
+    grad,
+    project,
+    assemble,
+    solve,
+    XDMFFile,
+    Mesh,
+    MeshFunction,
+    near,
+    inner,
+    SubDomain,
+    cells,
+)
 import argparse
 import matplotlib.pyplot as plt
 
+
 def read_data(path):
-    raw = np.loadtxt(path, delimiter=',', skiprows=1)
-    x = raw[:,0]
-    eta = raw[:,1]
-    phi = raw[:,2]
-    L = float(raw[0,3])
-    h0 = float(raw[0,4])
+    raw = np.loadtxt(path, delimiter=",", skiprows=1)
+    x = raw[:, 0]
+    eta = raw[:, 1]
+    phi = raw[:, 2]
+    L = float(raw[0, 3])
+    h0 = float(raw[0, 4])
     # Enforce periodicity at x=0 and x=L for eta and phi
     idx_sort = np.argsort(x)
     x = x[idx_sort]
@@ -60,13 +81,16 @@ def read_data(path):
     phi[0] = phi[-1] = 0.5 * (phi[0] + phi[-1])
     return x, eta, phi, L, h0
 
+
 class PeriodicBoundary(SubDomain):
     def __init__(self, L, tol=1e-8):
         super().__init__()
         self.L = L
         self.tol = tol
+
     def inside(self, x, on_boundary):
         return on_boundary and near(x[0], 0.0, self.tol)
+
     def map(self, x, y):
         if near(x[0], self.L, self.tol):
             y[0] = x[0] - self.L
@@ -79,24 +103,30 @@ class PeriodicBoundary(SubDomain):
             if len(x) > 2:  # Handle 3D case even though we're in 2D
                 y[2] = x[2]
 
+
 class FreeSurface(SubDomain):
     def __init__(self, eta_spline, tol=1e-3):
         super().__init__()
         self.eta = eta_spline
         self.tol = tol
+
     def inside(self, x, on_boundary):
         return on_boundary and near(x[1], float(self.eta(x[0])), self.tol)
+
 
 class PhiExpression(UserExpression):
     def __init__(self, phi_spline, **kwargs):
         super().__init__(**kwargs)
         self.spline = phi_spline
+
     def eval(self, values, x):
         values[0] = float(self.spline(x[0]))
+
     def value_shape(self):
         return ()
 
-def plot_scalar(field, mesh, title='Field'):  # pragma: no cover
+
+def plot_scalar(field, mesh, title="Field"):  # pragma: no cover
     """Plot a scalar field defined on mesh vertices."""
     coords = mesh.coordinates()
     values = field.compute_vertex_values(mesh)
@@ -106,32 +136,35 @@ def plot_scalar(field, mesh, title='Field'):  # pragma: no cover
         vert = cell.entities(0)
         cells_array.append([vert[0], vert[1], vert[2]])
     cells_array = np.array(cells_array, dtype=np.int32)
-    tri = Triangulation(coords[:,0], coords[:,1], cells_array)
-    plt.figure(figsize=(6,5))
+    tri = Triangulation(coords[:, 0], coords[:, 1], cells_array)
+    plt.figure(figsize=(6, 5))
     tpc = plt.tricontourf(tri, values, 50)
     cbar = plt.colorbar(tpc, label=title)
     # Add min/max info for uy_minus_vx plots
-    if 'u_y - v_x' in title or 'uy_minus_vx' in title or '|.|' in title:
+    if "u_y - v_x" in title or "uy_minus_vx" in title or "|.|" in title:
         minval = np.min(values)
         maxval = np.max(values)
-        cbar.ax.set_ylabel(f'{title}\n[min={minval:.2e}, max={maxval:.2e}]', rotation=270, labelpad=20)
-    plt.xlabel('x')
-    plt.ylabel('y')
+        cbar.ax.set_ylabel(
+            f"{title}\n[min={minval:.2e}, max={maxval:.2e}]", rotation=270, labelpad=20
+        )
+    plt.xlabel("x")
+    plt.ylabel("y")
     plt.title(title)
-    plt.gca().set_aspect('equal')
+    plt.gca().set_aspect("equal")
     plt.tight_layout()
     plt.show()
 
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--mesh',    required=True,
-                        help='Input XDMF mesh file')
-    parser.add_argument('--data',    required=True,
-                        help='CSV file with x,eta,phi,L,h0')
-    parser.add_argument('--degree',  type=int, default=2,
-                        help='Polynomial degree of finite elements')
-    parser.add_argument('--output',  default='solution/solution.xdmf',
-                        help='Filename for soln (XDMF)')
+    parser.add_argument("--mesh", required=True, help="Input XDMF mesh file")
+    parser.add_argument("--data", required=True, help="CSV file with x,eta,phi,L,h0")
+    parser.add_argument(
+        "--degree", type=int, default=2, help="Polynomial degree of finite elements"
+    )
+    parser.add_argument(
+        "--output", default="solution/solution.xdmf", help="Filename for soln (XDMF)"
+    )
     args = parser.parse_args()
 
     # Read and interpolate boundary data
@@ -145,13 +178,14 @@ def main():
         infile.read(mesh)
 
     # Mark free surface for Dirichlet BC
-    boundaries = MeshFunction('size_t', mesh, mesh.topology().dim()-1, 0)
+    boundaries = MeshFunction("size_t", mesh, mesh.topology().dim() - 1, 0)
     free = FreeSurface(eta_spline)
     free.mark(boundaries, 1)
 
     # Function space with periodic BC in x
-    V = FunctionSpace(mesh, 'Lagrange', args.degree,
-                      constrained_domain=PeriodicBoundary(L))
+    V = FunctionSpace(
+        mesh, "Lagrange", args.degree, constrained_domain=PeriodicBoundary(L)
+    )
 
     # Apply Dirichlet BC on free surface
     phi_expr = PhiExpression(phi_spline, degree=args.degree)
@@ -166,17 +200,17 @@ def main():
     solve(a == Lf, sol, bc)
 
     # Ensure output directory exists
-    sol_dir = os.path.dirname(args.output) or 'solution'
+    sol_dir = os.path.dirname(args.output) or "solution"
     os.makedirs(sol_dir, exist_ok=True)
     with XDMFFile(args.output) as outfile:
         outfile.write(sol)
-    print(f'Solution written to {args.output}')
+    print(f"Solution written to {args.output}")
 
     # Plot potential
-    plot_scalar(sol, mesh, title='Φ(x,y)')
+    plot_scalar(sol, mesh, title="Φ(x,y)")
 
     # Compute velocity components
-    W = VectorFunctionSpace(mesh, 'Lagrange', args.degree)
+    W = VectorFunctionSpace(mesh, "Lagrange", args.degree)
     grad_sol = project(grad(sol), W)
     components = grad_sol.split()
     u_comp = components[0]
@@ -189,27 +223,27 @@ def main():
     grad_v = project(grad(v_comp), W)
 
     # Save gradients to XDMF
-    grad_u_file = os.path.join(sol_dir, 'grad_u.xdmf')
-    grad_v_file = os.path.join(sol_dir, 'grad_v.xdmf')
+    grad_u_file = os.path.join(sol_dir, "grad_u.xdmf")
+    grad_v_file = os.path.join(sol_dir, "grad_v.xdmf")
     with XDMFFile(grad_u_file) as fgu:
         fgu.write(grad_u)
     with XDMFFile(grad_v_file) as fgv:
         fgv.write(grad_v)
-    print(f'Gradient of u saved to {grad_u_file}')
-    print(f'Gradient of v saved to {grad_v_file}')
+    print(f"Gradient of u saved to {grad_u_file}")
+    print(f"Gradient of v saved to {grad_v_file}")
 
     # Compute u_y - v_x
     # grad_u: [∂u/∂x, ∂u/∂y], grad_v: [∂v/∂x, ∂v/∂y]
     # Extract components
-    u_y = project(grad_u[1], FunctionSpace(mesh, 'Lagrange', args.degree))
-    v_x = project(grad_v[0], FunctionSpace(mesh, 'Lagrange', args.degree))
-    uy_minus_vx = project(u_y - v_x, FunctionSpace(mesh, 'Lagrange', args.degree))
+    u_y = project(grad_u[1], FunctionSpace(mesh, "Lagrange", args.degree))
+    v_x = project(grad_v[0], FunctionSpace(mesh, "Lagrange", args.degree))
+    uy_minus_vx = project(u_y - v_x, FunctionSpace(mesh, "Lagrange", args.degree))
 
     # Plot u_y - v_x and print its norms
     max_norm = np.max(np.abs(uy_minus_vx.compute_vertex_values(mesh)))
     l2_norm = np.sqrt(assemble(uy_minus_vx**2 * dx))
-    print(f'Maximum |u_y - v_x| over the domain: {max_norm:.3e}')
-    print(f'L2 norm of u_y - v_x over the domain: {l2_norm:.3e}')
+    print(f"Maximum |u_y - v_x| over the domain: {max_norm:.3e}")
+    print(f"L2 norm of u_y - v_x over the domain: {l2_norm:.3e}")
     plot_scalar(uy_minus_vx, mesh, title=f"u_y - v_x (max |.|={max_norm:.2e})")
 
     # Plot horizontal and vertical velocities
@@ -218,7 +252,7 @@ def main():
 
     # New: extract velocities on free surface and plot & save
     # Evaluate u and v at free-surface points
-    x_pts = x   # original x data from CSV
+    x_pts = x  # original x data from CSV
     u_vals = np.array([u_comp([pt, eta_spline(pt), 0.0]) for pt in x_pts])
     v_vals = np.array([v_comp([pt, eta_spline(pt), 0.0]) for pt in x_pts])
 
@@ -235,14 +269,25 @@ def main():
     # plt.show()
 
     # Save free surface velocities to CSV
-    sol_dir = os.path.dirname(args.output) or 'solution'
-    u_csv = os.path.join(sol_dir, 'u_free_surface.csv')
-    v_csv = os.path.join(sol_dir, 'v_free_surface.csv')
-    np.savetxt(u_csv, np.column_stack((x_pts, u_vals)),
-               delimiter=',', header='x,u', comments='')
-    np.savetxt(v_csv, np.column_stack((x_pts, v_vals)),
-               delimiter=',', header='x,v', comments='')
-    print(f'Free-surface velocities saved to {u_csv} and {v_csv}')
+    sol_dir = os.path.dirname(args.output) or "solution"
+    u_csv = os.path.join(sol_dir, "u_free_surface.csv")
+    v_csv = os.path.join(sol_dir, "v_free_surface.csv")
+    np.savetxt(
+        u_csv,
+        np.column_stack((x_pts, u_vals)),
+        delimiter=",",
+        header="x,u",
+        comments="",
+    )
+    np.savetxt(
+        v_csv,
+        np.column_stack((x_pts, v_vals)),
+        delimiter=",",
+        header="x,v",
+        comments="",
+    )
+    print(f"Free-surface velocities saved to {u_csv} and {v_csv}")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()
