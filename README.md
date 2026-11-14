@@ -1,76 +1,139 @@
-# FlowReconstruct: Potential Flow Reconstruction from Dirichlet data with periodic boundary conditions
+<!-- Author: Dr. Denys Dutykh (Mathematics Department, Khalifa University of Science and Technology, Abu Dhabi, UAE) -->
 
-**Author:** Dr. Denys Dutykh (Khalifa University of Science and Technology, Abu Dhabi, UAE)
+# FlowReconstruct: the potential flow under a periodic free surface, from the potential given on it
 
-**Date:** 2025-05-13
+![The mesh of the fluid domain under the free surface, and the potential and the velocity components computed on it](img/Illustration.png)
 
-## Overview
-This project provides a workflow for reconstructing the velocity potential in a 2D wave tank given random sea state data, using mesh generation and finite element methods (FEniCS/Gmsh). It was designed to be used as a post-processing tool in conjunction with the spectral solvers for the full Euler equations in 2D.
+The mesh that `mesh_domain.py` builds under a free surface η(x) = 0.1 sin x of length 4π above a flat bottom at depth 1
+(top), and the potential Φ and the velocity components u = ∂Φ/∂x and v = ∂Φ/∂y that `solve_laplace.py` computes on it,
+for the trace φ(x) = sin²x − cos⁴x of the potential on the free surface, as the scripts draw them. In its present form
+`solve_laplace.py` draws Φ and u_y − v_x; its plots of u and v are commented out.
 
-<p align="center">
-  <img src="img/Illustration.png" alt="FlowReconstruct illustration" width="600"/>
-</p>
+FlowReconstruct is a set of three Python scripts that reconstruct the velocity potential Φ(x, y) of a two-dimensional
+periodic wave tank from the shape of the free surface η(x) and the values φ(x) of the potential on it, both known at
+scattered points, and return the velocity field, in particular on the free surface. The scripts mesh the fluid domain
+with Gmsh and solve the Laplace equation by finite elements with the legacy FEniCS. They were written as a
+post-processing tool for the spectral solvers of the full Euler equations, which advance the free surface and the
+surface potential but do not give the flow beneath. No article accompanies the code, so the software itself is cited
+(see How to cite).
 
-## Components & Workflow
+## The problem
 
-**New in the latest version:**
-- **Periodicity enforcement:** The scripts now ensure periodicity at x=0 and x=L for η(x) and φ(x) in the data and mesh. Endpoints are added if missing, and their values are synchronized to enforce periodicity.
-- **Mesh smoothing and optimization:** The mesh generation script (`mesh_domain.py`) now applies built-in Gmsh mesh optimization (Netgen optimizer) after mesh generation, improving mesh quality for FEM solvers.
-- **Automatic mesh statistics report:** After mesh generation and plotting, `mesh_domain.py` now prints a detailed mesh statistics report to the terminal. This includes the number of nodes, edges, and triangles, edge length statistics (min, max, mean, std), triangle area statistics, and mesh quality metrics such as aspect ratio and triangle angles.
-- **Improved gradient diagnostics:** After solving, the script computes and prints both the maximum and L2 norm of the quantity u_y - v_x over the domain for diagnostic purposes.
-- **Enhanced plotting:** The colorbar for u_y - v_x plots now displays min/max values for more informative visualization.
-- After solving the Laplace equation, the script automatically plots the potential Φ(x, y) and both velocity components (u, v) as scalar fields over the domain.
-- The script now extracts, plots, and saves the horizontal and vertical velocity components along the free surface to CSV files: `solution/u_free_surface.csv` and `solution/v_free_surface.csv`.
+In the fluid domain 0 < x < L, −h0 < y < η(x), the potential Φ solves
 
-1. **generate_data.py**
-   - Generates random samples of x in [0, L], computes surface elevation η(x) and velocity potential φ(x), and saves results to a CSV file.
-   - Usage example:
-     ```bash
-     python generate_data.py [-a AMPLITUDE] [-L LENGTH] [-N NUM_SAMPLES] [-o OUTPUT_DIR] [--seed SEED]
-     ```
+```text
+∂²Φ/∂x² + ∂²Φ/∂y² = 0      in the fluid,
+Φ(x, η(x)) = φ(x)          on the free surface,
+∂Φ/∂y = 0                  on the bottom y = −h0,
+Φ periodic in x of period L,
+```
 
-2. **mesh_domain.py**
-   - Reads wave data from CSV, extrapolates endpoints, and enforces periodicity at x=0 and x=L for η(x).
-   - Generates a triangular mesh of the fluid domain (for FEniCS), applies Gmsh mesh optimization (Netgen), and exports to Gmsh (.msh) and XDMF files. Also plots the domain and mesh.
-   - **Detailed mesh statistics report:** After mesh generation and plotting, the script automatically prints a comprehensive report to the terminal, including:
-     - Number of nodes, edges, and triangles
-     - Edge length statistics (min, max, mean, std)
-     - Triangle area statistics (min, max, mean, std)
-     - Mesh quality metrics: aspect ratio (R/r), minimum and maximum triangle angles (with statistics)
-   - Usage example:
-     ```bash
-     python mesh_domain.py -i data/data.csv -m mesh/mesh.msh -x mesh/mesh.xdmf --mesh-size 0.1
-     ```
+and the velocity is (u, v) = (∂Φ/∂x, ∂Φ/∂y). Since the flow is irrotational, u_y − v_x vanishes; its computed values
+measure the error of the discretisation.
 
-3. **solve_laplace.py**
-   - Solves the Laplace equation ∇²Φ = 0 in the generated mesh domain, with appropriate boundary conditions (periodic, Neumann, Dirichlet from data). Enforces periodicity in η(x) and φ(x) from input data.
-   - Plots the potential field Φ(x, y) and visualizes both horizontal (u = ∂Φ/∂x) and vertical (v = ∂Φ/∂y) velocity components after solving.
-   - Computes and prints both the maximum and L2 norm of u_y - v_x over the domain. The colorbar for this plot shows min/max values for clearer interpretation.
-   - Extracts the free-surface velocity components (u, v) at the surface points and saves them to `solution/u_free_surface.csv` and `solution/v_free_surface.csv`.
-   - Exports the solution to XDMF format.
-   - Usage example:
-     ```bash
-     python solve_laplace.py --mesh mesh/mesh.xdmf --data data/data.csv --degree 2 --output solution/solution.xdmf
-     ```
+The data are sorted in x, extended to x = 0 and x = L by cubic splines, and made periodic by giving both ends the mean
+of their two values. The free surface of the mesh is the polygon through the data points, closed by the vertical sides
+x = 0 and x = L and the bottom y = −h0; Gmsh meshes this domain with triangles of the requested size (0.1 by default)
+and improves them with its Netgen optimiser. On this mesh, `solve_laplace.py` uses continuous Lagrange elements (of
+degree 2 by default) constrained to be periodic in x, imposes the cubic spline of φ on the boundary facets that lie
+within 10⁻³ of the spline of η, and leaves the homogeneous Neumann condition at the bottom to the weak form. The
+velocity is the projection of ∇Φ on the same elements, and its values at the data points of the free surface are
+written to two CSV files. Since the free surface passes through every data point, two close points make a short edge:
+the mesh that `mesh_domain.py` builds from the shipped data, whose closest points are 7 × 10⁻⁶ apart, has edges from
+7 × 10⁻⁶ to 0.13 and a smallest angle of 0.04°.
+
+## The data
+
+The script `generate_data.py` draws N points x uniformly at random in [0, L], sorts them, and evaluates two analytic
+test fields there,
+
+```text
+η(x) = a sin x,        φ(x) = sin²x − cos⁴x,
+```
+
+which it writes, with L and h0, to `data/data.csv` (columns x, eta, phi, L, h0). They are not a sea state: data computed
+by a spectral solver of the Euler equations take their place in an application. The options are
+
+| Option | Meaning | Default |
+|---|---|---|
+| `-a`, `--amplitude` | amplitude a of η | 0.1 |
+| `-L`, `--length` | length L of the tank | 4π |
+| `-N`, `--num-samples` | number N of random points | 100 |
+| `--h0` | undisturbed depth h0 (bottom at y = −h0) | 1.0 |
+| `-o`, `--output-dir` | folder of `data.csv` | `data` |
+| `--seed` | seed of the random generator | none |
+
+The shipped file `data/data.csv` holds 500 points with a = 0.1, L = 4π and h0 = 1; the folders `mesh/` and `solution/`
+hold its mesh and its solution.
+
+## Quick start
+
+From the root folder of the repository, the three steps are
+
+```bash
+python3 generate_data.py -N 500 --seed 1
+python3 mesh_domain.py -i data/data.csv -m mesh/mesh.msh -x mesh/mesh.xdmf --mesh-size 0.1
+python3 solve_laplace.py --mesh mesh/mesh.xdmf --data data/data.csv --degree 2 --output solution/solution.xdmf
+```
+
+The first writes new data over `data/data.csv` and draws them; it is skipped to keep the shipped data. The second
+writes the mesh to `mesh/mesh.msh` and `mesh/mesh.xdmf` (with `mesh/mesh.h5`), draws it and prints its statistics
+(numbers of nodes, edges and triangles, lengths, areas, aspect ratios and angles). The third writes the potential to
+`solution/solution.xdmf`, the gradients of u and v to `solution/grad_u.xdmf` and `solution/grad_v.xdmf`, and the
+velocities at the free-surface points to `solution/u_free_surface.csv` and `solution/v_free_surface.csv`; it draws Φ and
+u_y − v_x and prints the largest value and the L² norm of u_y − v_x. Each figure opens in a window of Matplotlib.
+
+## Contents
+
+| File or folder | Contents |
+|---|---|
+| `generate_data.py` | the analytic test data at random points |
+| `mesh_domain.py` | the periodic extension of η, the mesh of the fluid domain and its statistics |
+| `solve_laplace.py` | the finite element solution of the Laplace equation, the velocities and the check u_y − v_x |
+| `data/data.csv` | the shipped data (500 points) |
+| `mesh/` | the mesh of the shipped data (Gmsh and XDMF) |
+| `solution/` | the potential, the gradients of the velocity components and the free-surface velocities for the shipped data |
+| `img/Illustration.png` | the figure at the top of this page |
 
 ## Requirements
-- Python 3.x
-- numpy, matplotlib, scipy, gmsh, meshio, fenics
 
-## Output Directory Structure
-- Mesh files are saved in the `mesh/` subdirectory by default.
-- Solution files are saved in the `solution/` subdirectory by default.
-- Free-surface velocity CSV files are saved as `solution/u_free_surface.csv` and `solution/v_free_surface.csv`.
+Python 3.10 or later (`generate_data.py` writes its type hints with the union operator, `int | None`), NumPy, SciPy,
+Matplotlib, and the Python modules of Gmsh (`gmsh`) and meshio for the first two scripts; `solve_laplace.py` needs in
+addition the legacy FEniCS, the module `fenics` of FEniCS 2019 (not FEniCSx, whose module is `dolfinx`). The first two
+scripts were checked with Python 3.14, gmsh 4.14 and meshio 5.3.
 
-## Usage
-1. Generate data: `generate_data.py`
-2. Generate mesh: `mesh_domain.py`
-3. Solve Laplace: `solve_laplace.py`
+## How to cite
 
-See each script's docstring for details and options.
+No article accompanies this code, so please cite the software itself:
 
----
+D. Dutykh, FlowReconstruct: the potential flow under a periodic free surface, from the potential given on it, version
+1.0.0 (2026).
 
-## Acknowledgement
+https://github.com/dutykh/FlowReconstruct
 
-Special thanks to Professor Francesco Fedele (Georgia Tech, Atlanta, USA) for posing the pertinent questions which led to this development.
+```bibtex
+@software{Dutykh_FlowReconstruct,
+  author = {Dutykh, Denys},
+  title = {{FlowReconstruct}: the potential flow under a periodic free surface, from the potential given on it},
+  year = {2026},
+  version = {1.0.0},
+  url = {https://github.com/dutykh/FlowReconstruct},
+  license = {LGPL-3.0-only}
+}
+```
+
+The button "Cite this repository" in the right-hand column of this page gives the same reference, read from
+`CITATION.cff`.
+
+## Licence
+
+GNU Lesser General Public License, version 3 (see `LICENSE`).
+
+## Author
+
+Denys Dutykh (Mathematics Department, Khalifa University of Science and Technology, Abu Dhabi, UAE).
+
+https://www.denys-dutykh.com/
+
+Special thanks to Professor Francesco Fedele (Georgia Institute of Technology, Atlanta, USA) for posing the questions
+that led to this development.

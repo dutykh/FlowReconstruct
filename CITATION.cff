@@ -1,0 +1,30 @@
+# Dr. Denys Dutykh (Mathematics Department, Khalifa University of Science and Technology, Abu Dhabi, UAE)
+cff-version: 1.2.0
+message: "No article accompanies this code: if you use it, please cite the software as given in this file."
+title: "FlowReconstruct: the potential flow under a periodic free surface, from the potential given on it"
+type: software
+authors:
+  - family-names: Dutykh
+    given-names: Denys
+    affiliation: "Khalifa University of Science and Technology"
+    orcid: "https://orcid.org/0000-0001-5247-2788"
+repository-code: "https://github.com/dutykh/FlowReconstruct"
+license: LGPL-3.0-only
+version: 1.0.0
+date-released: "2026-11-14"
+keywords:
+  - laplace-equation
+  - potential-flow
+  - free-surface-flow
+  - water-waves
+  - periodic-boundary-conditions
+  - finite-element-method
+  - fenics
+  - gmsh
+  - python
+abstract: >-
+  Three Python scripts that reconstruct the velocity potential of a two-dimensional periodic wave tank from the shape
+  of the free surface and the values of the potential on it, known at scattered points, and return the velocity field,
+  in particular on the free surface. The fluid domain is meshed with Gmsh and the Laplace equation, with the potential
+  imposed on the free surface, no flow through the flat bottom and periodicity in the horizontal direction, is solved by
+  finite elements with the legacy FEniCS; a generator of analytic test data at random points is included.
